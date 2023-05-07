@@ -63,12 +63,12 @@ public:
 class NeuralNetwork
 {
 public:
-    void forward(const olc::vf2d& observation, std::tuple<std::tuple<float, float>>& policy, float& value)
+    void forward(const olc::vf2d& observation, std::tuple<std::tuple<float, float>, std::tuple<float, float>>& policy, float& value)
     {
-        policy = std::make_tuple(std::make_tuple(randomFloat(-1, 1), randomFloat(-1, 1)));
+        policy = std::make_tuple(std::make_tuple(randomFloat(-1, 1), randomFloat(-1, 1)), std::make_tuple(randomFloat(-1, 1), randomFloat(-1, 1)));
         value = randomFloat(-1, 1);
     }
-    void sample(const std::tuple<std::tuple<float, float>>& policy, olc::vf2d& action)
+    void sample(const std::tuple<std::tuple<float, float>, std::tuple<float, float>>& policy, olc::vf2d& action)
     {
         action = { randomFloat(-1, 1), randomFloat(-1, 1) };
     }
@@ -78,7 +78,7 @@ struct RolloutData
 {
     olc::vf2d observation;
     olc::vf2d action;
-    std::tuple<std::tuple<float, float>> policy;
+    std::tuple<std::tuple<float, float>, std::tuple<float, float>> policy;
     float value;
     float reward;
     bool notDone;
@@ -101,7 +101,7 @@ public:
             std::vector<RolloutData> rollout;
 
             olc::vf2d observation;
-            std::tuple<std::tuple<float, float>> policy;
+            std::tuple<std::tuple<float, float>, std::tuple<float, float>> policy;
             float value;
             olc::vf2d action;
             float reward;
@@ -144,7 +144,11 @@ public:
                 {
 					std::cout << "Observation: " << rollouts[i][j].observation << std::endl;
 					std::cout << "Action: " << rollouts[i][j].action << std::endl;
-					std::cout << "Policy: " << std::get<0>(std::get<0>(rollouts[i][j].policy)) << ", " << std::get<1>(std::get<0>(rollouts[i][j].policy)) << std::endl;
+                    // for policy, need to unpack tuple into 2 means and 2 stds
+                    std::cout << "Policy x mean: " << std::get<0>(std::get<0>(rollouts[i][j].policy)) << std::endl;
+                    std::cout << "Policy x std: " << std::get<1>(std::get<0>(rollouts[i][j].policy)) << std::endl;
+                    std::cout << "Policy y mean: " << std::get<0>(std::get<1>(rollouts[i][j].policy)) << std::endl;
+                    std::cout << "Policy y std: " << std::get<1>(std::get<1>(rollouts[i][j].policy)) << std::endl;
 					std::cout << "Value: " << rollouts[i][j].value << std::endl;
 					std::cout << "Reward: " << rollouts[i][j].reward << std::endl;
 					std::cout << "Not Done: " << rollouts[i][j].notDone << std::endl;
