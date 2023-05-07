@@ -2,7 +2,18 @@
 #include "olcPixelGameEngine.h"
 #include <random>
 
-// Include necessary libraries (cuBLAS, cuDNN, cuRAND)
+/*
+High Level Overview:
+1. collect N full games. each step in the game should store the observation, action, policy log probabilities, value, reward
+2. use a full rollout to calculate the returns and advantage for each step
+3. use the returns to calculate the value loss
+    valueGrad = 2 * (return - value)
+4. use the advantage, old policy log probabilities, and new policy log probabilities to calculate the policy loss
+    epsilon = 0.2
+    ratio = exp(newLogProb - oldLogProb)
+    clipRatio = clip(ratio, 1 - epsilon, 1 + epsilon)
+    policyGrad = min(advantage * ratio, advantage * clipRatio)
+*/
 
 float randomFloat(float min, float max)
 {
