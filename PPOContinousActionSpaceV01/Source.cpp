@@ -7,12 +7,28 @@ High Level Overview:
 1. collect N full games. each step in the game should store the observation, action, policy log probabilities, value, reward
 2. use a full rollout to calculate the returns and advantage for each step
 3. use the returns to calculate the value loss
-    valueGrad = 2 * (return - value)
 4. use the advantage, old policy log probabilities, and new policy log probabilities to calculate the policy loss
+    
     epsilon = 0.2
-    ratio = exp(newLogProb - oldLogProb)
-    clipRatio = clip(ratio, 1 - epsilon, 1 + epsilon)
-    policyGrad = min(advantage * ratio, advantage * clipRatio)
+    upperBound = 1 + epsilon
+    lowerBound = 1 - epsilon
+    maxPolicyTrainIters = 100
+
+    for maxPolicyTrainIters
+        nn.forward(observation, policy, value)
+        nn.sample(policy, action)
+
+        valueGrad = 2 * (return - value)
+
+        float tmp = (action - mean) / std;
+        newLogProb = -0.5f * tmp * tmp - log(std) - 0.9189385332046727f;
+
+        ratio = exp(newLogProb - oldLogProb)
+        clipRatio = clip(ratio, lowerBound, upperBound)
+        policyGrad = min(advantage * ratio, advantage * clipRatio)
+        klDiv = oldLogProb - newLogProb
+        if klDiv > 0.01
+			break
 */
 
 float randomFloat(float min, float max)
