@@ -123,7 +123,7 @@ public:
             rollout.back().return_ = return_;
 
             float lastAdvantage = rollout[i].reward - rollout[i].value;
-            rollout[i].advantage = lastAdvantage;
+            rollout.back().advantage = lastAdvantage;
             float lastValue = value;
 
             for (int i = rollout.size() - 2; i >= 0; --i)
