@@ -65,8 +65,8 @@ class NeuralNetwork
 public:
     void forward(const olc::vf2d& observation, std::tuple<std::tuple<float, float>, std::tuple<float, float>>& policy, float& value)
     {
-        policy = std::make_tuple(std::make_tuple(randomFloat(-1, 1), randomFloat(-1, 1)), std::make_tuple(randomFloat(-1, 1), randomFloat(-1, 1)));
-        value = randomFloat(-1, 1);
+        policy = std::make_tuple(std::make_tuple(randomFloat(-0.1, 0.1), randomFloat(1, 2)), std::make_tuple(randomFloat(-0.1, 0.1), randomFloat(1, 2)));
+        value = randomFloat(0, 1);
     }
     void sample(const std::tuple<std::tuple<float, float>, std::tuple<float, float>>& policy, olc::vf2d& action)
     {
@@ -119,12 +119,12 @@ public:
                 rollout.push_back({ observation, action, policy, value, reward, notDone, return_, advantage });
 			}
 
-            return_ = value;
+            return_ = reward;
             rollout.back().return_ = return_;
 
             float lastAdvantage = rollout[i].reward - rollout[i].value;
-            rollout.back().advantage = lastAdvantage;
             float lastValue = value;
+            rollout.back().advantage = lastAdvantage;
 
             for (int i = rollout.size() - 2; i >= 0; --i)
             {
@@ -154,7 +154,31 @@ public:
 					std::cout << "Not Done: " << rollouts[i][j].notDone << std::endl;
 					std::cout << "Return: " << rollouts[i][j].return_ << std::endl;
 					std::cout << "Advantage: " << rollouts[i][j].advantage << std::endl;
-					std::cout << std::endl;
+
+                    // print the value gradient
+                    std::cout << "Value Gradient: " << rollouts[i][j].return_ - rollouts[i][j].value << std::endl;
+					
+                    // print the policy gradient
+                    float xStdDev = std::get<1>(std::get<0>(rollouts[i][j].policy));
+                    float xVarience = xStdDev * xStdDev;
+                    float xMean = std::get<0>(std::get<0>(rollouts[i][j].policy));
+                    float xAction = rollouts[i][j].action.x;
+                    float xMeanGrad = (xAction - xMean) / xVarience;
+                    float xStdGrad = ((xAction - xMean) * (xAction - xMean) - xVarience) / (xVarience * xStdDev);
+
+                    float yStdDev = std::get<1>(std::get<1>(rollouts[i][j].policy));
+                    float yVarience = yStdDev * yStdDev;
+                    float yMean = std::get<0>(std::get<1>(rollouts[i][j].policy));
+                    float yAction = rollouts[i][j].action.y;
+                    float yMeanGrad = (yAction - yMean) / yVarience;
+                    float yStdGrad = ((yAction - yMean) * (yAction - yMean) - yVarience) / (yVarience * yStdDev);
+
+                    std::cout << "Policy x mean Gradient: " << xMeanGrad << std::endl;
+                    std::cout << "Policy x std Gradient: " << xStdGrad << std::endl;
+                    std::cout << "Policy y mean Gradient: " << yMeanGrad << std::endl;
+                    std::cout << "Policy y std Gradient: " << yStdGrad << std::endl;
+
+                    std::cout << std::endl;
 				}
 			}
         }
