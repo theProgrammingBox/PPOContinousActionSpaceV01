@@ -99,11 +99,12 @@ int main()
             {
                 nn.forward(observationPtr, policyPtr, valuePtr);
                 nn.sample(policyPtr, actionPtr);
+                // this iteration is a problem
+                observationPtr++;
                 env.step(actionPtr, observationPtr, rewardPtr);
                 tmp = (*actionPtr - (*policyPtr).x) / (*policyPtr).y;
                 *logProbabilityPtr = -0.5f * tmp * tmp - log((*policyPtr).y) - 0.9189385332046727f;
 
-                observationPtr++;
                 valuePtr++;
                 policyPtr++;
                 actionPtr++;
