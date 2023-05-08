@@ -172,7 +172,7 @@ int main()
                     
                     ratio = exp(newLogProb - *logProbabilityPtr);
                     clipRatio = std::min(std::max(ratio, lowerBound), upperBound);
-                    *policyGradientPtr = olc::vf2d(1, 1) * *advantagePtr * std::min(ratio, clipRatio);
+                    *policyGradientPtr = olc::vf2d(tmp / updatedPolicy.y, (tmp * tmp - 1.0f) / updatedPolicy.y) * *advantagePtr * std::min(ratio, clipRatio);
                     klDivergence += *logProbabilityPtr - newLogProb;
 
                     observationPtr++;
