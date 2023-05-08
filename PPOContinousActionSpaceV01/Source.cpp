@@ -3,18 +3,11 @@
 #include <random>
 
 /*
-High Level Overview:
-1. collect N full games. each step in the game should store the observation, updatedAction, updatedPolicy log probabilities, updatedValue, reward
-2. use a full rollout to calculate the returns and advantage for each step
-3. use the returns to calculate the updatedValue loss
-4. use the advantage, old updatedPolicy log probabilities, and new updatedPolicy log probabilities to calculate the updatedPolicy loss
-*/
-
-/*
 TODO:
 0. remove policyPtr and arr if not needed
 1. see if there is a need for the ptr vars. can remove otherize cuz messy
 2. make sure env doesn't alter observation when game over due to how the loop works
+3. alter the buffers so they can handle dynamic lengths
 */
 
 struct Environment
@@ -92,41 +85,44 @@ int main()
     olc::vf2d* policyGradientPtr;
 
     float tmp;
-    float discountedReward;
+    float lastDiscountedReward;
     float lastAdvantage;
     float lastValue;
     float klDivergence;
     olc::vf2d updatedPolicy;
     float updatedValue;
     float updatedAction;
+    float newLogProb;
+    float ratio;
+    float clipRatio;
 
-    for (uint32_t epoch = 0; epoch < maxEpoch; epoch++)
+    for (uint32_t epoch = maxEpoch; epoch--;)
     {
         observationPtr = observations;
         policyPtr = policies;
         valuePtr = values;
         actionPtr = actions;
-        rewardPtr = rewards;
         logProbabilityPtr = logProbabilities;
-        for (uint32_t rollout = 0; rollout < maxRollouts; rollout++)
+        rewardPtr = rewards;
+        for (uint32_t rollout = maxRollouts; rollout--;)
         {
             env.reset(observationPtr);
-            for (uint32_t step = 0; step < maxGameSteps; step++)
+            for (uint32_t step = maxGameSteps; step--;)
             {
                 nn.forward(observationPtr, policyPtr, valuePtr);
                 nn.sample(policyPtr, actionPtr);
+                tmp = (*actionPtr - (*policyPtr).x) / (*policyPtr).y;
+                *logProbabilityPtr = -0.5f * tmp * tmp - log((*policyPtr).y) - 0.9189385332046727f;
                 
                 observationPtr++;
                 
                 env.step(actionPtr, observationPtr, rewardPtr);
-                tmp = (*actionPtr - (*policyPtr).x) / (*policyPtr).y;
-                *logProbabilityPtr = -0.5f * tmp * tmp - log((*policyPtr).y) - 0.9189385332046727f;
 
-                valuePtr++;
                 policyPtr++;
+                valuePtr++;
                 actionPtr++;
-                rewardPtr++;
                 logProbabilityPtr++;
+                rewardPtr++;
             }
         }
 
@@ -136,13 +132,13 @@ int main()
 		advantagePtr = advantages + arrSize - 1;
         for (uint32_t rollout = maxRollouts; rollout--;)
         {
-            discountedReward = 0;
+            lastDiscountedReward = 0;
             lastAdvantage = 0;
 			lastValue = 0;
             for (uint32_t step = maxGameSteps; step--;)
             {
-                discountedReward = *rewardPtr + discountFactor * discountedReward;
-                *discountedRewardPtr = discountedReward;
+                lastDiscountedReward = *rewardPtr + discountFactor * lastDiscountedReward;
+                *discountedRewardPtr = lastDiscountedReward;
 
 				lastAdvantage = *rewardPtr + discountFactor * lastValue - *valuePtr + discountFactor * lambda * lastAdvantage;
 				lastValue = *valuePtr;
@@ -155,7 +151,7 @@ int main()
             }
         }
 
-        for (uint32_t iteration = 0; iteration < maxUpdates; iteration++)
+        for (uint32_t iteration = maxUpdates; iteration--;)
         {
             klDivergence = 0;
             observationPtr = observations;
@@ -164,19 +160,19 @@ int main()
             logProbabilityPtr = logProbabilities;
             policyGradientPtr = policyGradients;
             advantagePtr = advantages;
-            for (uint32_t rollout = 0; rollout < maxRollouts; rollout++)
+            for (uint32_t rollout = maxRollouts; rollout--;)
             {
-                for (uint32_t step = 0; step < maxGameSteps; step++)
+                for (uint32_t step = maxGameSteps; step--;)
                 {
                     nn.forward(observationPtr, &updatedPolicy, &updatedValue);
                     nn.sample(&updatedPolicy, &updatedAction);
                     *valueGradientPtr = 2 * (*discountedRewardPtr - updatedValue);
                     tmp = (updatedAction - updatedPolicy.x) / updatedPolicy.y;
-                    float newLogProb = -0.5f * tmp * tmp - log(updatedPolicy.y) - 0.9189385332046727f;
+                    newLogProb = -0.5f * tmp * tmp - log(updatedPolicy.y) - 0.9189385332046727f;
                     
-                    float ratio = exp(newLogProb - *logProbabilityPtr);
-                    float clipRatio = std::min(std::max(ratio, lowerBound), upperBound);
-                    *policyGradientPtr = olc::vf2d(0, 0) * std::min(*advantagePtr * ratio, *advantagePtr * clipRatio);
+                    ratio = exp(newLogProb - *logProbabilityPtr);
+                    clipRatio = std::min(std::max(ratio, lowerBound), upperBound);
+                    *policyGradientPtr = olc::vf2d(1, 1) * *advantagePtr * std::min(ratio, clipRatio);
                     klDivergence += *logProbabilityPtr - newLogProb;
 
                     observationPtr++;
