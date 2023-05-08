@@ -4,217 +4,167 @@
 
 /*
 High Level Overview:
-1. collect N full games. each step in the game should store the observation, action, policy log probabilities, value, reward
+1. collect N full games. each step in the game should store the observation, updatedAction, updatedPolicy log probabilities, updatedValue, reward
 2. use a full rollout to calculate the returns and advantage for each step
-3. use the returns to calculate the value loss
-4. use the advantage, old policy log probabilities, and new policy log probabilities to calculate the policy loss
-    
-    epsilon = 0.2
-    upperBound = 1 + epsilon
-    lowerBound = 1 - epsilon
-    maxPolicyTrainIters = 100
-
-    for maxPolicyTrainIters
-        nn.forward(observation, policy, value)
-        nn.sample(policy, action)
-
-        valueGrad = 2 * (return - value)
-
-        float tmp = (action - mean) / std;
-        newLogProb = -0.5f * tmp * tmp - log(std) - 0.9189385332046727f;
-
-        ratio = exp(newLogProb - oldLogProb)
-        clipRatio = clip(ratio, lowerBound, upperBound)
-        policyGrad = min(advantage * ratio, advantage * clipRatio)
-        klDiv = oldLogProb - newLogProb
-        if klDiv > 0.01
-			break
+3. use the returns to calculate the updatedValue loss
+4. use the advantage, old updatedPolicy log probabilities, and new updatedPolicy log probabilities to calculate the updatedPolicy loss
 */
 
-float randomFloat(float min, float max)
+/*
+TODO:
+0. remove policyPtr and arr if not needed
+1. see if there is a need for the ptr vars. can remove otherize cuz messy
+*/
+
+struct Environment
 {
-    static std::default_random_engine generator;
-    std::uniform_real_distribution<float> distribution(min, max);
-    return distribution(generator);
-}
-
-class Environment
-{
-private:
-    const olc::vf2d lowerBound = { 0.0f, 0.0f };
-    const olc::vf2d upperBound = { 1000.0f, 500.0f };
-    const float sqrTargetRadius = 100.0;
-    const int maxSteps = 16;
-
-    int currentStep;
-    olc::vf2d agentPosition;
-    olc::vf2d targetPosition;
-
-    olc::vf2d randomVector(const olc::vf2d& min, const olc::vf2d& max)
+    void reset(olc::vf2d* observation)
     {
-		return { randomFloat(min.x, max.x), randomFloat(min.y, max.y) };
 	}
 
-    void GetObservation(olc::vf2d& observation)
+    void step(float* updatedAction, olc::vf2d* observation, float* reward)
     {
-        observation = agentPosition - targetPosition;
+	}
+};
+
+struct NeuralNetwork
+{
+    void forward(olc::vf2d* observation, olc::vf2d* updatedPolicy, float* updatedValue)
+    {
 	}
 
-public:
-    void reset(olc::vf2d& observation)
+    void sample(olc::vf2d* updatedPolicy, float* updatedAction)
     {
-        currentStep = 0;
-        agentPosition = randomVector(lowerBound, upperBound);
-        targetPosition = randomVector(lowerBound, upperBound);
-        GetObservation(observation);
-    }
-
-    void step(const olc::vf2d& action, olc::vf2d& observation, float& reward, bool& notDone)
-    {
-        currentStep++;
-        agentPosition += action;
-        agentPosition.clamp(lowerBound, upperBound);
-
-        reward = 0;
-        if ((agentPosition - targetPosition).mag2() <= sqrTargetRadius)
-        {
-            targetPosition = randomVector(lowerBound, upperBound);
-            reward = 1;
-        }
-        notDone = currentStep < maxSteps;
-        GetObservation(observation);
-    }
-};
-
-
-class NeuralNetwork
-{
-public:
-    void forward(const olc::vf2d& observation, std::tuple<std::tuple<float, float>, std::tuple<float, float>>& policy, float& value)
-    {
-        policy = std::make_tuple(std::make_tuple(randomFloat(-0.1, 0.1), randomFloat(1, 2)), std::make_tuple(randomFloat(-0.1, 0.1), randomFloat(1, 2)));
-        value = randomFloat(0, 1);
-    }
-    void sample(const std::tuple<std::tuple<float, float>, std::tuple<float, float>>& policy, olc::vf2d& action)
-    {
-        action = { randomFloat(-1, 1), randomFloat(-1, 1) };
-    }
-};
-
-struct RolloutData
-{
-    olc::vf2d observation;
-    olc::vf2d action;
-    std::tuple<std::tuple<float, float>, std::tuple<float, float>> policy;
-    float value;
-    float reward;
-    bool notDone;
-    float return_;
-    float advantage;
-};
-
-class PPO
-{
-private:
-    const float discount = 0.99;
-    const float gamma = 0.99;
-    const float lambda = 0.95;
-public:
-    PPO(Environment& env, NeuralNetwork& nn)
-    {
-        std::vector<std::vector<RolloutData>> rollouts;
-        for (uint32_t i = 0; i < 1; ++i)
-        {
-            std::vector<RolloutData> rollout;
-
-            olc::vf2d observation;
-            std::tuple<std::tuple<float, float>, std::tuple<float, float>> policy;
-            float value;
-            olc::vf2d action;
-            float reward;
-            bool notDone = true;
-            float return_ = 0;
-            float advantage = 0;
-            env.reset(observation);
-
-            while (notDone)
-            {
-                nn.forward(observation, policy, value);
-                nn.sample(policy, action);
-                env.step(action, observation, reward, notDone);
-
-                rollout.push_back({ observation, action, policy, value, reward, notDone, return_, advantage });
-			}
-
-            return_ = reward;
-            rollout.back().return_ = return_;
-
-            float lastAdvantage = rollout[i].reward - rollout[i].value;
-            float lastValue = value;
-            rollout.back().advantage = lastAdvantage;
-
-            for (int i = rollout.size() - 2; i >= 0; --i)
-            {
-				return_ = rollout[i].reward + discount * return_;
-				rollout[i].return_ = return_;
-
-                lastAdvantage = (rollout[i].reward + gamma * lastValue - rollout[i].value) + gamma * lambda * lastAdvantage;
-                rollout[i].advantage = lastAdvantage;
-                lastValue = rollout[i].value;
-			}
-			rollouts.push_back(rollout);
-
-            //print out rollout data
-            for (uint32_t i = 0; i < rollouts.size(); ++i)
-            {
-                for (uint32_t j = 0; j < rollouts[i].size(); ++j)
-                {
-					std::cout << "Observation: " << rollouts[i][j].observation << std::endl;
-					std::cout << "Action: " << rollouts[i][j].action << std::endl;
-                    // for policy, need to unpack tuple into 2 means and 2 stds
-                    std::cout << "Policy x mean: " << std::get<0>(std::get<0>(rollouts[i][j].policy)) << std::endl;
-                    std::cout << "Policy x std: " << std::get<1>(std::get<0>(rollouts[i][j].policy)) << std::endl;
-                    std::cout << "Policy y mean: " << std::get<0>(std::get<1>(rollouts[i][j].policy)) << std::endl;
-                    std::cout << "Policy y std: " << std::get<1>(std::get<1>(rollouts[i][j].policy)) << std::endl;
-					std::cout << "Value: " << rollouts[i][j].value << std::endl;
-					std::cout << "Reward: " << rollouts[i][j].reward << std::endl;
-					std::cout << "Not Done: " << rollouts[i][j].notDone << std::endl;
-					std::cout << "Return: " << rollouts[i][j].return_ << std::endl;
-					std::cout << "Advantage: " << rollouts[i][j].advantage << std::endl;
-
-                    // print the value gradient
-                    std::cout << "Value Gradient: " << rollouts[i][j].return_ - rollouts[i][j].value << std::endl;
-					
-                    // print the policy gradient
-                    float xStdDev = std::get<1>(std::get<0>(rollouts[i][j].policy));
-                    float xVarience = xStdDev * xStdDev;
-                    float xMean = std::get<0>(std::get<0>(rollouts[i][j].policy));
-                    float xAction = rollouts[i][j].action.x;
-                    float xMeanGrad = (xAction - xMean) / xVarience;
-                    float xStdGrad = ((xAction - xMean) * (xAction - xMean) - xVarience) / (xVarience * xStdDev);
-
-                    float yStdDev = std::get<1>(std::get<1>(rollouts[i][j].policy));
-                    float yVarience = yStdDev * yStdDev;
-                    float yMean = std::get<0>(std::get<1>(rollouts[i][j].policy));
-                    float yAction = rollouts[i][j].action.y;
-                    float yMeanGrad = (yAction - yMean) / yVarience;
-                    float yStdGrad = ((yAction - yMean) * (yAction - yMean) - yVarience) / (yVarience * yStdDev);
-
-                    std::cout << "Policy x mean Gradient: " << xMeanGrad << std::endl;
-                    std::cout << "Policy x std Gradient: " << xStdGrad << std::endl;
-                    std::cout << "Policy y mean Gradient: " << yMeanGrad << std::endl;
-                    std::cout << "Policy y std Gradient: " << yStdGrad << std::endl;
-
-                    std::cout << std::endl;
-				}
-			}
-        }
-    }
+	}
 };
 
 int main()
 {
+    const uint32_t maxEpoch = 100000;
+    const uint32_t maxUpdates = 16;
+    const uint32_t maxRollouts = 16;
+    const uint32_t maxGameSteps = 16;
+    const uint32_t arrSize = maxRollouts * maxGameSteps;
+
+    const float invArrSize = 1.0f / arrSize;
+    const float discountFactor = 0.99f;
+    const float epsilon = 0.2f;
+    const float upperBound = 1.0f + epsilon;
+    const float lowerBound = 1.0f - epsilon;
+    const float klThreshold = 0.01f;
+
     Environment env;
     NeuralNetwork nn;
-    PPO ppo(env, nn);
+
+    olc::vf2d observations[arrSize];
+    olc::vf2d policies[arrSize];
+    float values[arrSize];
+    float actions[arrSize];
+    float rewards[arrSize];
+    float logProbabilities[arrSize];
+    float discountedRewards[arrSize];
+    float advantages[arrSize];
+    float valueGradients[arrSize];
+    olc::vf2d policyGradients[arrSize];
+
+    olc::vf2d* observationPtr;
+    olc::vf2d* policyPtr;
+    float* valuePtr;
+    float* actionPtr;
+    float* rewardPtr;
+    float* logProbabilityPtr;
+    float* discountedRewardPtr;
+    float* advantagePtr;
+    float* valueGradientPtr;
+    olc::vf2d* policyGradientPtr;
+
+    float tmp;
+    float klDivergence;
+    olc::vf2d updatedPolicy;
+    float updatedValue;
+    float updatedAction;
+
+    for (uint32_t epoch = 0; epoch < maxEpoch; epoch++)
+    {
+        observationPtr = observations;
+        policyPtr = policies;
+        valuePtr = values;
+        actionPtr = actions;
+        rewardPtr = rewards;
+        logProbabilityPtr = logProbabilities;
+        for (uint32_t rollout = 0; rollout < maxRollouts; rollout++)
+        {
+            env.reset(observationPtr);
+            for (uint32_t step = 0; step < maxGameSteps; step++)
+            {
+                nn.forward(observationPtr, policyPtr, valuePtr);
+                nn.sample(policyPtr, actionPtr);
+                env.step(actionPtr, observationPtr, rewardPtr);
+                tmp = (*actionPtr - (*policyPtr).x) / (*policyPtr).y;
+                *logProbabilityPtr = -0.5f * tmp * tmp - log((*policyPtr).y) - 0.9189385332046727f;
+
+                observationPtr++;
+                valuePtr++;
+                policyPtr++;
+                actionPtr++;
+                rewardPtr++;
+                logProbabilityPtr++;
+            }
+        }
+
+        // place holder for discountedRewards and advantages math
+        // see if we can reverse the entire thing to use ptrs
+        for (uint32_t rollout = maxRollouts; rollout--;)
+        {
+            float discountedReward = rewards[rollout * maxGameSteps + maxGameSteps - 1];
+            discountedRewards[rollout * maxGameSteps + maxGameSteps - 1] = discountedReward;
+            float lastAdvantage = rewards[rollout * maxGameSteps + maxGameSteps - 1] - values[rollout * maxGameSteps + maxGameSteps - 1];
+            advantages[rollout * maxGameSteps + maxGameSteps - 1] = lastAdvantage;
+            for (uint32_t step = maxGameSteps - 1; step--;)
+            {
+                discountedReward = rewards[rollout * maxGameSteps + maxGameSteps] + discountFactor * discountedReward;
+                discountedRewards[rollout * maxGameSteps + maxGameSteps] = discountedReward;
+                lastAdvantage = rewards[rollout * maxGameSteps + maxGameSteps] + discountFactor * values[rollout * maxGameSteps + maxGameSteps - 1]
+                advantages[]
+            }
+        }
+
+        for (uint32_t iteration = 0; iteration < maxUpdates; iteration++)
+        {
+            klDivergence = 0;
+            observationPtr = observations;
+            valueGradientPtr = valueGradients;
+            discountedRewardPtr = discountedRewards;
+            logProbabilityPtr = logProbabilities;
+            policyGradientPtr = policyGradients;
+            advantagePtr = advantages;
+            for (uint32_t rollout = 0; rollout < maxRollouts; rollout++)
+            {
+                for (uint32_t step = 0; step < maxGameSteps; step++)
+                {
+                    nn.forward(observationPtr, &updatedPolicy, &updatedValue);
+                    nn.sample(&updatedPolicy, &updatedAction);
+                    *valueGradientPtr = 2 * (*discountedRewardPtr - updatedValue);
+                    tmp = (updatedAction - updatedPolicy.x) / updatedPolicy.y;
+                    float newLogProb = -0.5f * tmp * tmp - log(updatedPolicy.y) - 0.9189385332046727f;
+                    
+                    float ratio = exp(newLogProb - *logProbabilityPtr);
+                    float clipRatio = std::min(std::max(ratio, lowerBound), upperBound);
+                    *policyGradientPtr = olc::vf2d(0, 0) * std::min(*advantagePtr * ratio, *advantagePtr * clipRatio);
+                    klDivergence += *logProbabilityPtr - newLogProb;
+
+                    observationPtr++;
+                    valueGradientPtr++;
+                    discountedRewardPtr++;
+                    logProbabilityPtr++;
+                    policyGradientPtr++;
+                    advantagePtr++;
+                }
+            }
+            if (klDivergence * invArrSize > klThreshold)
+                break;
+        }
+    }
+
+    return 0;
 }
