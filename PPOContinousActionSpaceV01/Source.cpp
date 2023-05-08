@@ -14,27 +14,40 @@ High Level Overview:
 TODO:
 0. remove policyPtr and arr if not needed
 1. see if there is a need for the ptr vars. can remove otherize cuz messy
+2. make sure env doesn't alter observation when game over due to how the loop works
 */
 
 struct Environment
 {
     void reset(olc::vf2d* observation)
     {
+		*observation = { 0.0f, 0.0f };
 	}
 
-    void step(float* updatedAction, olc::vf2d* observation, float* reward)
+    void step(float* action, olc::vf2d* observation, float* reward)
     {
+        if (true)
+        {
+            *reward = 0.0f;
+        }
+        if (true)
+        {
+            *observation = { 0.0f, 0.0f };
+        }
 	}
 };
 
 struct NeuralNetwork
 {
-    void forward(olc::vf2d* observation, olc::vf2d* updatedPolicy, float* updatedValue)
+    void forward(olc::vf2d* observation, olc::vf2d* policy, float* value)
     {
-	}
+        *policy = { 0.0f, 0.0f };
+        *value = 0.0f;
+    }
 
-    void sample(olc::vf2d* updatedPolicy, float* updatedAction)
+    void sample(olc::vf2d* policy, float* action)
     {
+		*action = 0.0f;
 	}
 };
 
@@ -45,9 +58,9 @@ int main()
     const uint32_t maxRollouts = 16;
     const uint32_t maxGameSteps = 16;
     const uint32_t arrSize = maxRollouts * maxGameSteps;
-
-    const float invArrSize = 1.0f / arrSize;
+    
     const float discountFactor = 0.99f;
+	const float lambda = 0.95f;
     const float epsilon = 0.2f;
     const float upperBound = 1.0f + epsilon;
     const float lowerBound = 1.0f - epsilon;
@@ -79,6 +92,9 @@ int main()
     olc::vf2d* policyGradientPtr;
 
     float tmp;
+    float discountedReward;
+    float lastAdvantage;
+    float lastValue;
     float klDivergence;
     olc::vf2d updatedPolicy;
     float updatedValue;
@@ -99,8 +115,9 @@ int main()
             {
                 nn.forward(observationPtr, policyPtr, valuePtr);
                 nn.sample(policyPtr, actionPtr);
-                // this iteration is a problem
+                
                 observationPtr++;
+                
                 env.step(actionPtr, observationPtr, rewardPtr);
                 tmp = (*actionPtr - (*policyPtr).x) / (*policyPtr).y;
                 *logProbabilityPtr = -0.5f * tmp * tmp - log((*policyPtr).y) - 0.9189385332046727f;
@@ -113,20 +130,28 @@ int main()
             }
         }
 
-        // place holder for discountedRewards and advantages math
-        // see if we can reverse the entire thing to use ptrs
+		rewardPtr = rewards + arrSize - 1;
+		discountedRewardPtr = discountedRewards + arrSize - 1;
+		valuePtr = values + arrSize - 1;
+		advantagePtr = advantages + arrSize - 1;
         for (uint32_t rollout = maxRollouts; rollout--;)
         {
-            float discountedReward = rewards[rollout * maxGameSteps + maxGameSteps - 1];
-            discountedRewards[rollout * maxGameSteps + maxGameSteps - 1] = discountedReward;
-            float lastAdvantage = rewards[rollout * maxGameSteps + maxGameSteps - 1] - values[rollout * maxGameSteps + maxGameSteps - 1];
-            advantages[rollout * maxGameSteps + maxGameSteps - 1] = lastAdvantage;
-            for (uint32_t step = maxGameSteps - 1; step--;)
+            discountedReward = 0;
+            lastAdvantage = 0;
+			lastValue = 0;
+            for (uint32_t step = maxGameSteps; step--;)
             {
-                discountedReward = rewards[rollout * maxGameSteps + maxGameSteps] + discountFactor * discountedReward;
-                discountedRewards[rollout * maxGameSteps + maxGameSteps] = discountedReward;
-                lastAdvantage = rewards[rollout * maxGameSteps + maxGameSteps] + discountFactor * values[rollout * maxGameSteps + maxGameSteps - 1]
-                advantages[]
+                discountedReward = *rewardPtr + discountFactor * discountedReward;
+                *discountedRewardPtr = discountedReward;
+
+				lastAdvantage = *rewardPtr + discountFactor * lastValue - *valuePtr + discountFactor * lambda * lastAdvantage;
+				lastValue = *valuePtr;
+                *advantagePtr = lastAdvantage;
+
+                rewardPtr--;
+                discountedRewardPtr--;
+				valuePtr--;
+				advantagePtr--;
             }
         }
 
@@ -162,7 +187,7 @@ int main()
                     advantagePtr++;
                 }
             }
-            if (klDivergence * invArrSize > klThreshold)
+            if (klDivergence / arrSize > klThreshold)
                 break;
         }
     }
