@@ -17,9 +17,9 @@ struct Environment
 		*observationReturn = { 0.0f, 0.0f };
 	}
 
-    void step(float* action, olc::vf2d* observationReturn, float* rewardReturn)
+    void step(float* actionInput, olc::vf2d* observationReturn, float* rewardReturn)
     {
-        *rewardReturn = -abs(10.0f - *action);
+        *rewardReturn = -abs(10.0f - *actionInput);
         if (false)
         {
             *observationReturn = { 0.0f, 0.0f };
@@ -29,28 +29,33 @@ struct Environment
 
 struct NeuralNetwork
 {
-    float mean = 0;
-	float std = 1;
+    olc::vf2d policy = { 0.0f, 1.0f };
 	float value = 0;
     
-    void forward(olc::vf2d* observation, olc::vf2d* policyReturn, float* valueReturn)
+    void forward(olc::vf2d* observationInput, olc::vf2d* policyReturn, float* valueReturn)
     {
-		*policyReturn = { mean, std };
+        *policyReturn = policy;
 		*valueReturn = value;
     }
 
-    void sample(olc::vf2d* policy, float* actionReturn)
+    void sample(olc::vf2d* policyInput, float* actionReturn)
     {
         static std::random_device rd;
         static std::mt19937 gen(rd());
         static std::normal_distribution<float> d(0, 1);
-		*actionReturn = policy->x + policy->y * d(gen);
+		*actionReturn = policyInput->x + policyInput->y * d(gen);
 	}
+
+    void update(olc::vf2d* policyGradInput, float* valueGradInput, float learningRateInput)
+    {
+		policy += *policyGradInput * learningRateInput;
+        value += *valueGradInput * learningRateInput;
+    }
 };
 
 int main()
 {
-    const uint32_t maxEpoch = 16;
+    const uint32_t maxEpoch = 10;
     const uint32_t maxUpdates = 16;
     const uint32_t maxRollouts = 16;
     const uint32_t maxGameSteps = 1;
@@ -61,7 +66,8 @@ int main()
     const float epsilon = 0.2f;
     const float upperBound = 1.0f + epsilon;
     const float lowerBound = 1.0f - epsilon;
-    const float klThreshold = 0.01f;
+    const float klThreshold = 0.02f;
+    const float learningRate = 0.001f / arrSize;
 
     Environment env;
     NeuralNetwork nn;
@@ -95,6 +101,8 @@ int main()
     float klDivergence;
     float ratio;
     float clipRatio;
+    float valueLoss;
+    float policyLoss;
 
     for (uint32_t epoch = maxEpoch; epoch--;)
     {
@@ -147,9 +155,12 @@ int main()
             }
         }
 
+        printf("\nh\n");
         for (uint32_t iteration = maxUpdates; iteration--;)
         {
             klDivergence = 0;
+            valueLoss = 0;
+            policyLoss = 0;
             observationPtr = observations;
             discountedRewardPtr = discountedRewards;
             logProbabilityPtr = logProbabilities;
@@ -173,9 +184,13 @@ int main()
                     
                     ratio = exp(logProb - *logProbabilityPtr);
                     clipRatio = std::min(std::max(ratio, lowerBound), upperBound);
-                    *policyGradPtr *= std::min(*advantagePtr * ratio, *advantagePtr * clipRatio);
+                    tmp = std::min(*advantagePtr * ratio, *advantagePtr * clipRatio);
+                    *policyGradPtr *= tmp;
+                    policyLoss -= tmp;
 
-                    *valueGradPtr = 2 * (*discountedRewardPtr - value);
+                    tmp = *discountedRewardPtr - value;
+                    *valueGradPtr = 2 * tmp;
+                    valueLoss += tmp * tmp;
 
                     observationPtr++;
                     discountedRewardPtr++;
@@ -184,20 +199,35 @@ int main()
                     advantagePtr++;
                     valueGradPtr++;
                 }
+            }/**/
+
+            // print stats
+            if (iteration + 1 == maxUpdates)
+            {
+                printf("valueLoss: %f\n", valueLoss / arrSize);
+                printf("policyLoss: %f\n", policyLoss / arrSize);
+                printf("klDivergence: %f\n", klDivergence / arrSize);
+                printf("policy: %f, %f\n", policy.x, policy.y);
+                printf("value: %f\n", value);
+                printf("action: %f\n", action);
             }
             
             if (klDivergence / arrSize > klThreshold)
                 break;
             
             // update model
-            policyGradPtr = policyGrads;
+            /*policyGradPtr = policyGrads;
             valueGradPtr = valueGrads;
             for (uint32_t rollout = maxRollouts; rollout--;)
             {
                 for (uint32_t step = maxGameSteps; step--;)
                 {
+                    nn.update(policyGradPtr, valueGradPtr, learningRate);
+
+                    policyGradPtr++;
+                    valueGradPtr++;
                 }
-            }
+            }*/
         }
     }
 
