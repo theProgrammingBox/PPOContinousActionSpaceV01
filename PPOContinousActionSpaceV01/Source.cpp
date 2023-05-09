@@ -14,9 +14,6 @@ the probability of the move, and vice versa. That is basically what advantage is
 same move is more/less likely to be taken. we do this by taking a ratio of their log probabilities.
 if the ratio is greater or less than 1 + epsilon, we clip it to 1 + epsilon or 1 - epsilon
 respectively. I still dont fully understand why this works, but it does.
-4. Additionally, I included the kl divergence as a way to check if the policy is changing too much.
-I plugged in the equation on desmos and I can kind of see how it works, but I still don't fully
-understand it.
 */
 
 /*
@@ -85,10 +82,9 @@ int main()
 
 	const float discountFactor = 0.99f;
 	const float lambda = 0.95f;
-	const float epsilon = 0.16f;
+	const float epsilon = 0.14f;
 	const float upperBound = 1.0f + epsilon;
 	const float lowerBound = 1.0f - epsilon;
-	const float klThreshold = 0.02f;
 	const float policyLearningRate = 0.01f / arrSize;
 	const float valueLearningRate = 0.1f / arrSize;
 
@@ -122,7 +118,6 @@ int main()
 	olc::vf2d policy;
 	float value;
 	float logProb;
-	//float klDivergence;
 	float ratio;
 	float clipRatio;
 	float policyLoss;
@@ -182,7 +177,6 @@ int main()
 
 		for (uint32_t epoch = maxEpoches; epoch--;)
 		{
-			//klDivergence = 0;
 			policyLoss = 0;
 			observationPtr = observations;
 			actionPtr = actions;
@@ -202,8 +196,6 @@ int main()
 					policyGradPtr->y = policyGradPtr->x * policyGradPtr->x * policy.y - tmp;
 					logProb = -0.5f * policyGradPtr->y * policy.y - log(policy.y) - 1.4189385332046727f;
 
-					//klDivergence -= exp(*logProbabilityPtr) * (*logProbabilityPtr - logProb);
-
 					ratio = exp(logProb - *logProbabilityPtr);
 					clipRatio = std::min(std::max(ratio, lowerBound), upperBound);
 					tmp = std::min(*advantagePtr * ratio, *advantagePtr * clipRatio);
@@ -222,10 +214,6 @@ int main()
 				}
 			}
 
-			/*if (klDivergence / arrSize > klThreshold)
-				break;*/
-			//printf("klDivergence: %f\n", klDivergence / arrSize);
-
 			policyGradPtr = policyGrads;
 			valueGradPtr = valueGrads;
 			for (uint32_t rollout = maxRollouts; rollout--;)
@@ -238,10 +226,8 @@ int main()
 					valueGradPtr++;
 				}
 			}
+			printf("policyLoss: %f\n", policyLoss / arrSize);
 		}
-		/*printf("policy3: %f, %f\n", nn.policy.x, nn.policy.y);
-		printf("value: %f\n", nn.value);*/
-		printf("policyLoss: %f\n", policyLoss / arrSize);
 	}
 
 	return 0;
