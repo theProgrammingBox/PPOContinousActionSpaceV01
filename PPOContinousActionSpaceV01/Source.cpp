@@ -49,13 +49,14 @@ struct NeuralNetwork
 	void update(olc::vf2d* policyGradInput, float* valueGradInput, float policyLearningRateInput, float valueLearningRateInput)
 	{
 		policy += *policyGradInput * policyLearningRateInput;
+		policy.y = std::max(0.2f, policy.y);
 		value += *valueGradInput * valueLearningRateInput;
 	}
 };
 
 int main()
 {
-	const uint32_t maxEpoch = 2;
+	const uint32_t maxEpoch = 1000;
 	const uint32_t maxUpdates = 10;
 	const uint32_t maxRollouts = 10;
 	const uint32_t maxGameSteps = 1;
@@ -67,8 +68,8 @@ int main()
 	const float upperBound = 1.0f + epsilon;
 	const float lowerBound = 1.0f - epsilon;
 	const float klThreshold = 0.02f;
-	const float policyLearningRate = 0.01f / arrSize;
-	const float valueLearningRate = 0.1f / arrSize;
+	const float policyLearningRate = 0.001f / arrSize;
+	const float valueLearningRate = 0.01f / arrSize;
 
 	Environment env;
 	NeuralNetwork nn;
@@ -205,18 +206,10 @@ int main()
 				}
 			}
 
-			// print stats
-			if (iteration + 1 == maxUpdates)
-			{
-				/*printf("valueLoss: %f\n", valueLoss / arrSize);
-				printf("policyLoss: %f\n", policyLoss / arrSize);
-				printf("klDivergence: %f\n", klDivergence / arrSize);*/
-			}
-
 			/*if (klDivergence / arrSize > klThreshold)
 				break;*/
 
-			// update model
+				// update model
 			policyGradPtr = policyGrads;
 			valueGradPtr = valueGrads;
 			for (uint32_t rollout = maxRollouts; rollout--;)
@@ -224,18 +217,15 @@ int main()
 				for (uint32_t step = maxGameSteps; step--;)
 				{
 					nn.update(policyGradPtr, valueGradPtr, policyLearningRate, valueLearningRate);
-					/*printf("valueGrad: %f\n", valueGradPtr);
-					printf("policyGrad: %f, %f\n", policyGradPtr->x, policyGradPtr->y);
-					printf("\n");*/
 
 					policyGradPtr++;
 					valueGradPtr++;
 				}
 			}
-			printf("policy: %f, %f\n", policy.x, policy.y);
-			printf("value: %f\n", value);
-			printf("\n");
 		}
+		printf("policy3: %f, %f\n", nn.policy.x, nn.policy.y);
+		printf("value: %f\n", nn.value);
+		printf("\n");
 	}
 
 	return 0;
