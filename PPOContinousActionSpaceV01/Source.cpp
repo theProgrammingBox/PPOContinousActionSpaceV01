@@ -46,18 +46,18 @@ struct NeuralNetwork
 		*actionReturn = policyInput->x + policyInput->y * d(gen);
 	}
 
-	void update(olc::vf2d* policyGradInput, float* valueGradInput, float learningRateInput)
+	void update(olc::vf2d* policyGradInput, float* valueGradInput, float policyLearningRateInput, float valueLearningRateInput)
 	{
-		policy += *policyGradInput * learningRateInput;
-		value += *valueGradInput * learningRateInput;
+		policy += *policyGradInput * policyLearningRateInput;
+		value += *valueGradInput * valueLearningRateInput;
 	}
 };
 
 int main()
 {
-	const uint32_t maxEpoch = 10;
-	const uint32_t maxUpdates = 16;
-	const uint32_t maxRollouts = 16;
+	const uint32_t maxEpoch = 2;
+	const uint32_t maxUpdates = 10;
+	const uint32_t maxRollouts = 10;
 	const uint32_t maxGameSteps = 1;
 	const uint32_t arrSize = maxRollouts * maxGameSteps;
 
@@ -67,12 +67,14 @@ int main()
 	const float upperBound = 1.0f + epsilon;
 	const float lowerBound = 1.0f - epsilon;
 	const float klThreshold = 0.02f;
-	const float learningRate = 0.1f / arrSize;
+	const float policyLearningRate = 0.01f / arrSize;
+	const float valueLearningRate = 0.1f / arrSize;
 
 	Environment env;
 	NeuralNetwork nn;
 
 	olc::vf2d observations[arrSize];
+	float actions[arrSize];
 	float values[arrSize];
 	float rewards[arrSize];
 	float logProbabilities[arrSize];
@@ -82,6 +84,7 @@ int main()
 	float valueGrads[arrSize];
 
 	olc::vf2d* observationPtr;
+	float* actionPtr;
 	float* valuePtr;
 	float* rewardPtr;
 	float* logProbabilityPtr;
@@ -96,7 +99,6 @@ int main()
 	float lastValue;
 	olc::vf2d policy;
 	float value;
-	float action;
 	float logProb;
 	float klDivergence;
 	float ratio;
@@ -107,6 +109,7 @@ int main()
 	for (uint32_t epoch = maxEpoch; epoch--;)
 	{
 		observationPtr = observations;
+		actionPtr = actions;
 		valuePtr = values;
 		logProbabilityPtr = logProbabilities;
 		rewardPtr = rewards;
@@ -116,14 +119,15 @@ int main()
 			for (uint32_t step = maxGameSteps; step--;)
 			{
 				nn.forward(observationPtr, &policy, valuePtr);
-				nn.sample(&policy, &action);
-				tmp = (action - policy.x) / policy.y;
+				nn.sample(&policy, actionPtr);
+				tmp = (*actionPtr - policy.x) / policy.y;
 				*logProbabilityPtr = -0.5f * tmp * tmp - log(policy.y) - 0.9189385332046727f;
 
 				observationPtr++;
 
-				env.step(&action, observationPtr, rewardPtr);
+				env.step(actionPtr, observationPtr, rewardPtr);
 
+				actionPtr++;
 				valuePtr++;
 				logProbabilityPtr++;
 				rewardPtr++;
@@ -161,6 +165,7 @@ int main()
 			valueLoss = 0;
 			policyLoss = 0;
 			observationPtr = observations;
+			actionPtr = actions;
 			discountedRewardPtr = discountedRewards;
 			logProbabilityPtr = logProbabilities;
 			policyGradPtr = policyGrads;
@@ -171,11 +176,10 @@ int main()
 				for (uint32_t step = maxGameSteps; step--;)
 				{
 					nn.forward(observationPtr, &policy, &value);
-					nn.sample(&policy, &action);
 
 					// unoptimize the function to get better accuracy
 					tmp = 1.0f / policy.y;
-					policyGradPtr->x = (action - policy.x) * tmp * tmp;
+					policyGradPtr->x = (*actionPtr - policy.x) * tmp * tmp;
 					policyGradPtr->y = policyGradPtr->x * policyGradPtr->x * policy.y - tmp;
 					logProb = -0.5f * policyGradPtr->y * policy.y - log(policy.y) - 1.4189385332046727f;
 
@@ -185,13 +189,14 @@ int main()
 					clipRatio = std::min(std::max(ratio, lowerBound), upperBound);
 					tmp = std::min(*advantagePtr * ratio, *advantagePtr * clipRatio);
 					*policyGradPtr *= tmp;
-					policyLoss -= tmp;
+					policyLoss += tmp;
 
 					tmp = *discountedRewardPtr - value;
 					*valueGradPtr = 2 * tmp;
 					valueLoss += tmp * tmp;
 
 					observationPtr++;
+					actionPtr++;
 					discountedRewardPtr++;
 					logProbabilityPtr++;
 					policyGradPtr++;
@@ -203,30 +208,33 @@ int main()
 			// print stats
 			if (iteration + 1 == maxUpdates)
 			{
-				printf("valueLoss: %f\n", valueLoss / arrSize);
+				/*printf("valueLoss: %f\n", valueLoss / arrSize);
 				printf("policyLoss: %f\n", policyLoss / arrSize);
-				printf("klDivergence: %f\n", klDivergence / arrSize);
-				printf("policy: %f, %f\n", policy.x, policy.y);
-				printf("value: %f\n", value);
-				printf("action: %f\n", action);
+				printf("klDivergence: %f\n", klDivergence / arrSize);*/
 			}
 
 			/*if (klDivergence / arrSize > klThreshold)
 				break;*/
 
-				// update model
+			// update model
 			policyGradPtr = policyGrads;
 			valueGradPtr = valueGrads;
 			for (uint32_t rollout = maxRollouts; rollout--;)
 			{
 				for (uint32_t step = maxGameSteps; step--;)
 				{
-					nn.update(policyGradPtr, valueGradPtr, learningRate);
+					nn.update(policyGradPtr, valueGradPtr, policyLearningRate, valueLearningRate);
+					/*printf("valueGrad: %f\n", valueGradPtr);
+					printf("policyGrad: %f, %f\n", policyGradPtr->x, policyGradPtr->y);
+					printf("\n");*/
 
 					policyGradPtr++;
 					valueGradPtr++;
 				}
 			}
+			printf("policy: %f, %f\n", policy.x, policy.y);
+			printf("value: %f\n", value);
+			printf("\n");
 		}
 	}
 
