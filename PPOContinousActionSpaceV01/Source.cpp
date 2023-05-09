@@ -168,7 +168,7 @@ int main()
                     
                     ratio = exp(logProb - *logProbabilityPtr);
                     clipRatio = std::min(std::max(ratio, lowerBound), upperBound);
-                    *policyGradPtr *= *advantagePtr * std::min(ratio, clipRatio);
+                    *policyGradPtr *= std::min(*advantagePtr * ratio, *advantagePtr * clipRatio);
 
                     *valueGradPtr = 2 * (*discountedRewardPtr - value);
 
