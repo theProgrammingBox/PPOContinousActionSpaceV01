@@ -155,7 +155,6 @@ int main()
             }
         }
 
-        printf("\nh\n");
         for (uint32_t iteration = maxUpdates; iteration--;)
         {
             klDivergence = 0;
@@ -199,7 +198,7 @@ int main()
                     advantagePtr++;
                     valueGradPtr++;
                 }
-            }/**/
+            }
 
             // print stats
             if (iteration + 1 == maxUpdates)
