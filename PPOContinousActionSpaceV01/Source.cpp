@@ -63,45 +63,39 @@ int main()
     NeuralNetwork nn;
 
     olc::vf2d observations[arrSize];
-    olc::vf2d policies[arrSize];
     float values[arrSize];
-    float actions[arrSize];
     float rewards[arrSize];
     float logProbabilities[arrSize];
     float discountedRewards[arrSize];
     float advantages[arrSize];
-    float valueGradients[arrSize];
-    olc::vf2d policyGradients[arrSize];
+    olc::vf2d policyGrads[arrSize];
+    float valueGrads[arrSize];
 
     olc::vf2d* observationPtr;
-    olc::vf2d* policyPtr;
     float* valuePtr;
-    float* actionPtr;
     float* rewardPtr;
     float* logProbabilityPtr;
     float* discountedRewardPtr;
     float* advantagePtr;
-    float* valueGradientPtr;
-    olc::vf2d* policyGradientPtr;
+    olc::vf2d* policyGradPtr;
+    float* valueGradPtr;
 
     float tmp;
     float lastDiscountedReward;
     float lastAdvantage;
     float lastValue;
+    olc::vf2d policy;
+    float value;
+    float action;
+    float logProb;
     float klDivergence;
-    olc::vf2d updatedPolicy;
-    float updatedValue;
-    float updatedAction;
-    float newLogProb;
     float ratio;
     float clipRatio;
 
     for (uint32_t epoch = maxEpoch; epoch--;)
     {
         observationPtr = observations;
-        policyPtr = policies;
         valuePtr = values;
-        actionPtr = actions;
         logProbabilityPtr = logProbabilities;
         rewardPtr = rewards;
         for (uint32_t rollout = maxRollouts; rollout--;)
@@ -109,18 +103,16 @@ int main()
             env.reset(observationPtr);
             for (uint32_t step = maxGameSteps; step--;)
             {
-                nn.forward(observationPtr, policyPtr, valuePtr);
-                nn.sample(policyPtr, actionPtr);
-                tmp = (*actionPtr - (*policyPtr).x) / (*policyPtr).y;
-                *logProbabilityPtr = -0.5f * tmp * tmp - log((*policyPtr).y) - 0.9189385332046727f;
+                nn.forward(observationPtr, &policy, valuePtr);
+                nn.sample(&policy, &action);
+                tmp = (action - policy.x) / policy.y;
+                *logProbabilityPtr = -0.5f * tmp * tmp - log(policy.y) - 0.9189385332046727f;
                 
                 observationPtr++;
                 
-                env.step(actionPtr, observationPtr, rewardPtr);
-
-                policyPtr++;
+                env.step(&action, observationPtr, rewardPtr);
+                
                 valuePtr++;
-                actionPtr++;
                 logProbabilityPtr++;
                 rewardPtr++;
             }
@@ -155,36 +147,42 @@ int main()
         {
             klDivergence = 0;
             observationPtr = observations;
-            valueGradientPtr = valueGradients;
             discountedRewardPtr = discountedRewards;
             logProbabilityPtr = logProbabilities;
-            policyGradientPtr = policyGradients;
+            policyGradPtr = policyGrads;
             advantagePtr = advantages;
+            valueGradPtr = valueGrads;
             for (uint32_t rollout = maxRollouts; rollout--;)
             {
                 for (uint32_t step = maxGameSteps; step--;)
                 {
-                    nn.forward(observationPtr, &updatedPolicy, &updatedValue);
-                    nn.sample(&updatedPolicy, &updatedAction);
-                    *valueGradientPtr = 2 * (*discountedRewardPtr - updatedValue);
-                    tmp = (updatedAction - updatedPolicy.x) / updatedPolicy.y;
-                    newLogProb = -0.5f * tmp * tmp - log(updatedPolicy.y) - 0.9189385332046727f;
+                    nn.forward(observationPtr, &policy, &value);
+                    nn.sample(&policy, &action);
                     
-                    ratio = exp(newLogProb - *logProbabilityPtr);
+                    tmp = 1.0f / policy.y;
+                    policyGradPtr->x = (action - policy.x) * tmp * tmp;
+                    policyGradPtr->y = policyGradPtr->x * policyGradPtr->x * policy.y - tmp;
+                    logProb = -0.5f * policyGradPtr->y * policy.y - log(policy.y) - 1.4189385332046727f;
+                    
+                    klDivergence += *logProbabilityPtr - logProb;
+                    
+                    ratio = exp(logProb - *logProbabilityPtr);
                     clipRatio = std::min(std::max(ratio, lowerBound), upperBound);
-                    *policyGradientPtr = olc::vf2d(tmp / updatedPolicy.y, (tmp * tmp - 1.0f) / updatedPolicy.y) * *advantagePtr * std::min(ratio, clipRatio);
-                    klDivergence += *logProbabilityPtr - newLogProb;
+                    *policyGradPtr *= *advantagePtr * std::min(ratio, clipRatio);
+
+                    *valueGradPtr = 2 * (*discountedRewardPtr - value);
 
                     observationPtr++;
-                    valueGradientPtr++;
                     discountedRewardPtr++;
                     logProbabilityPtr++;
-                    policyGradientPtr++;
+                    policyGradPtr++;
                     advantagePtr++;
+                    valueGradPtr++;
                 }
             }
             if (klDivergence / arrSize > klThreshold)
                 break;
+            // update model
         }
     }
 
