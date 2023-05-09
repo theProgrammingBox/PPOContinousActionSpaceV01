@@ -4,52 +4,56 @@
 
 /*
 TODO:
-0. remove policyPtr and arr if not needed
-1. see if there is a need for the ptr vars. can remove otherize cuz messy
+0. implement a basic test where the outouts and values are constant, just train a single step
+1. test the current implementation to see if it works
 2. make sure env doesn't alter observation when game over due to how the loop works
 3. alter the buffers so they can handle dynamic lengths
 */
 
 struct Environment
 {
-    void reset(olc::vf2d* observation)
+    void reset(olc::vf2d* observationReturn)
     {
-		*observation = { 0.0f, 0.0f };
+		*observationReturn = { 0.0f, 0.0f };
 	}
 
-    void step(float* action, olc::vf2d* observation, float* reward)
+    void step(float* action, olc::vf2d* observationReturn, float* rewardReturn)
     {
-        if (true)
+        *rewardReturn = -abs(10.0f - *action);
+        if (false)
         {
-            *reward = 0.0f;
-        }
-        if (true)
-        {
-            *observation = { 0.0f, 0.0f };
+            *observationReturn = { 0.0f, 0.0f };
         }
 	}
 };
 
 struct NeuralNetwork
 {
-    void forward(olc::vf2d* observation, olc::vf2d* policy, float* value)
+    float mean = 0;
+	float std = 1;
+	float value = 0;
+    
+    void forward(olc::vf2d* observation, olc::vf2d* policyReturn, float* valueReturn)
     {
-        *policy = { 0.0f, 0.0f };
-        *value = 0.0f;
+		*policyReturn = { mean, std };
+		*valueReturn = value;
     }
 
-    void sample(olc::vf2d* policy, float* action)
+    void sample(olc::vf2d* policy, float* actionReturn)
     {
-		*action = 0.0f;
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        static std::normal_distribution<float> d(0, 1);
+		*actionReturn = policy->x + policy->y * d(gen);
 	}
 };
 
 int main()
 {
-    const uint32_t maxEpoch = 100000;
+    const uint32_t maxEpoch = 16;
     const uint32_t maxUpdates = 16;
     const uint32_t maxRollouts = 16;
-    const uint32_t maxGameSteps = 16;
+    const uint32_t maxGameSteps = 1;
     const uint32_t arrSize = maxRollouts * maxGameSteps;
     
     const float discountFactor = 0.99f;
@@ -159,6 +163,7 @@ int main()
                     nn.forward(observationPtr, &policy, &value);
                     nn.sample(&policy, &action);
                     
+                    // unoptimize the function to get better accuracy
                     tmp = 1.0f / policy.y;
                     policyGradPtr->x = (action - policy.x) * tmp * tmp;
                     policyGradPtr->y = policyGradPtr->x * policyGradPtr->x * policy.y - tmp;
@@ -180,9 +185,19 @@ int main()
                     valueGradPtr++;
                 }
             }
+            
             if (klDivergence / arrSize > klThreshold)
                 break;
+            
             // update model
+            policyGradPtr = policyGrads;
+            valueGradPtr = valueGrads;
+            for (uint32_t rollout = maxRollouts; rollout--;)
+            {
+                for (uint32_t step = maxGameSteps; step--;)
+                {
+                }
+            }
         }
     }
 
