@@ -21,10 +21,14 @@ understand it.
 
 /*
 TODO:
-0. implement a basic test where the outouts and values are constant, just train a single step
-1. test the current implementation to see if it works
-2. make sure env doesn't alter observation when game over due to how the loop works
-3. alter the buffers so they can handle dynamic lengths
+0. add an actual model
+1. alter the buffers so they can handle dynamic length games
+2. add a dynamic length game
+*/
+
+/*
+Reminders:
+0. make sure env doesn't alter observation when game over due to how the loop works
 */
 
 struct Environment
@@ -73,20 +77,20 @@ struct NeuralNetwork
 
 int main()
 {
-	const uint32_t maxEpoch = 512;
-	const uint32_t maxUpdates = 16;
+	const uint32_t maxEpisodes = 128;
+	const uint32_t maxEpoches = 16;
 	const uint32_t maxRollouts = 16;
 	const uint32_t maxGameSteps = 1;
 	const uint32_t arrSize = maxRollouts * maxGameSteps;
 
 	const float discountFactor = 0.99f;
 	const float lambda = 0.95f;
-	const float epsilon = 0.2f;
+	const float epsilon = 0.16f;
 	const float upperBound = 1.0f + epsilon;
 	const float lowerBound = 1.0f - epsilon;
 	const float klThreshold = 0.02f;
-	const float policyLearningRate = 0.004f / arrSize;
-	const float valueLearningRate = 0.04f / arrSize;
+	const float policyLearningRate = 0.01f / arrSize;
+	const float valueLearningRate = 0.1f / arrSize;
 
 	Environment env;
 	NeuralNetwork nn;
@@ -123,7 +127,7 @@ int main()
 	float clipRatio;
 	float policyLoss;
 
-	for (uint32_t epoch = maxEpoch; epoch--;)
+	for (uint32_t episode = maxEpisodes; episode--;)
 	{
 		observationPtr = observations;
 		actionPtr = actions;
@@ -176,7 +180,7 @@ int main()
 			}
 		}
 
-		for (uint32_t iteration = maxUpdates; iteration--;)
+		for (uint32_t epoch = maxEpoches; epoch--;)
 		{
 			//klDivergence = 0;
 			policyLoss = 0;
