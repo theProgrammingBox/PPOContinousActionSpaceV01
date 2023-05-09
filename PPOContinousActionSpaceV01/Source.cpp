@@ -55,7 +55,7 @@ struct NeuralNetwork
 
 int main()
 {
-    const uint32_t maxEpoch = 10;
+    const uint32_t maxEpoch = 100;
     const uint32_t maxUpdates = 16;
     const uint32_t maxRollouts = 16;
     const uint32_t maxGameSteps = 1;
@@ -67,7 +67,7 @@ int main()
     const float upperBound = 1.0f + epsilon;
     const float lowerBound = 1.0f - epsilon;
     const float klThreshold = 0.02f;
-    const float learningRate = 0.001f / arrSize;
+    const float learningRate = 0.1f / arrSize;
 
     Environment env;
     NeuralNetwork nn;
@@ -176,7 +176,7 @@ int main()
                     
                     // unoptimize the function to get better accuracy
                     tmp = 1.0f / policy.y;
-                    policyGradPtr->x = (action - policy.x) * tmp * tmp;
+                    policyGradPtr->x = -(action - policy.x) * tmp * tmp;
                     policyGradPtr->y = policyGradPtr->x * policyGradPtr->x * policy.y - tmp;
                     logProb = -0.5f * policyGradPtr->y * policy.y - log(policy.y) - 1.4189385332046727f;
                     
@@ -212,11 +212,11 @@ int main()
                 printf("action: %f\n", action);
             }
             
-            if (klDivergence / arrSize > klThreshold)
-                break;
+            /*if (klDivergence / arrSize > klThreshold)
+                break;*/
             
             // update model
-            /*policyGradPtr = policyGrads;
+            policyGradPtr = policyGrads;
             valueGradPtr = valueGrads;
             for (uint32_t rollout = maxRollouts; rollout--;)
             {
@@ -227,7 +227,7 @@ int main()
                     policyGradPtr++;
                     valueGradPtr++;
                 }
-            }*/
+            }
         }
     }
 
