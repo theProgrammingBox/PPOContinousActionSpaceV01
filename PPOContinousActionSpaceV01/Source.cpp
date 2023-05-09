@@ -55,7 +55,7 @@ struct NeuralNetwork
 
 int main()
 {
-    const uint32_t maxEpoch = 100;
+    const uint32_t maxEpoch = 10;
     const uint32_t maxUpdates = 16;
     const uint32_t maxRollouts = 16;
     const uint32_t maxGameSteps = 1;
@@ -176,7 +176,7 @@ int main()
                     
                     // unoptimize the function to get better accuracy
                     tmp = 1.0f / policy.y;
-                    policyGradPtr->x = -(action - policy.x) * tmp * tmp;
+                    policyGradPtr->x = (action - policy.x) * tmp * tmp;
                     policyGradPtr->y = policyGradPtr->x * policyGradPtr->x * policy.y - tmp;
                     logProb = -0.5f * policyGradPtr->y * policy.y - log(policy.y) - 1.4189385332046727f;
                     
