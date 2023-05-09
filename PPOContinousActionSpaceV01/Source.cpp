@@ -3,6 +3,23 @@
 #include <random>
 
 /*
+Important lessons:
+0. The value function is basically the average discounted reward expected to be received
+from a given state given that the agent follows the policy distribution.
+1. PPO works by having the policy distribution sample moves which all result in different
+discounted rewards. Then, we look at the value, aka the average reward expected and the
+reward we got from the move. If the reward is higher than the average, we want to increase
+the probability of the move, and vice versa. That is basically what advantage is.
+3. the important thing about ppo is the clipping. When we update the policy, we check if that
+same move is more/less likely to be taken. we do this by taking a ratio of their log probabilities.
+if the ratio is greater or less than 1 + epsilon, we clip it to 1 + epsilon or 1 - epsilon
+respectively. I still dont fully understand why this works, but it does.
+4. Additionally, I included the kl divergence as a way to check if the policy is changing too much.
+I plugged in the equation on desmos and I can kind of see how it works, but I still don't fully
+understand it.
+*/
+
+/*
 TODO:
 0. implement a basic test where the outouts and values are constant, just train a single step
 1. test the current implementation to see if it works
@@ -19,7 +36,7 @@ struct Environment
 
 	void step(float* actionInput, olc::vf2d* observationReturn, float* rewardReturn)
 	{
-		*rewardReturn = -abs(10.0f - *actionInput);
+		*rewardReturn = std::min(0.0f, 2.0f - abs(-9.0f - *actionInput));
 		if (false)
 		{
 			*observationReturn = { 0.0f, 0.0f };
@@ -49,16 +66,16 @@ struct NeuralNetwork
 	void update(olc::vf2d* policyGradInput, float* valueGradInput, float policyLearningRateInput, float valueLearningRateInput)
 	{
 		policy += *policyGradInput * policyLearningRateInput;
-		policy.y = std::max(0.2f, policy.y);
+		policy.y = std::max(0.1f, policy.y);
 		value += *valueGradInput * valueLearningRateInput;
 	}
 };
 
 int main()
 {
-	const uint32_t maxEpoch = 1000;
-	const uint32_t maxUpdates = 10;
-	const uint32_t maxRollouts = 10;
+	const uint32_t maxEpoch = 512;
+	const uint32_t maxUpdates = 16;
+	const uint32_t maxRollouts = 16;
 	const uint32_t maxGameSteps = 1;
 	const uint32_t arrSize = maxRollouts * maxGameSteps;
 
@@ -68,8 +85,8 @@ int main()
 	const float upperBound = 1.0f + epsilon;
 	const float lowerBound = 1.0f - epsilon;
 	const float klThreshold = 0.02f;
-	const float policyLearningRate = 0.001f / arrSize;
-	const float valueLearningRate = 0.01f / arrSize;
+	const float policyLearningRate = 0.004f / arrSize;
+	const float valueLearningRate = 0.04f / arrSize;
 
 	Environment env;
 	NeuralNetwork nn;
@@ -101,10 +118,9 @@ int main()
 	olc::vf2d policy;
 	float value;
 	float logProb;
-	float klDivergence;
+	//float klDivergence;
 	float ratio;
 	float clipRatio;
-	float valueLoss;
 	float policyLoss;
 
 	for (uint32_t epoch = maxEpoch; epoch--;)
@@ -162,8 +178,7 @@ int main()
 
 		for (uint32_t iteration = maxUpdates; iteration--;)
 		{
-			klDivergence = 0;
-			valueLoss = 0;
+			//klDivergence = 0;
 			policyLoss = 0;
 			observationPtr = observations;
 			actionPtr = actions;
@@ -178,23 +193,20 @@ int main()
 				{
 					nn.forward(observationPtr, &policy, &value);
 
-					// unoptimize the function to get better accuracy
 					tmp = 1.0f / policy.y;
 					policyGradPtr->x = (*actionPtr - policy.x) * tmp * tmp;
 					policyGradPtr->y = policyGradPtr->x * policyGradPtr->x * policy.y - tmp;
 					logProb = -0.5f * policyGradPtr->y * policy.y - log(policy.y) - 1.4189385332046727f;
 
-					klDivergence += *logProbabilityPtr - logProb;
+					//klDivergence -= exp(*logProbabilityPtr) * (*logProbabilityPtr - logProb);
 
 					ratio = exp(logProb - *logProbabilityPtr);
 					clipRatio = std::min(std::max(ratio, lowerBound), upperBound);
 					tmp = std::min(*advantagePtr * ratio, *advantagePtr * clipRatio);
 					*policyGradPtr *= tmp;
-					policyLoss += tmp;
+					policyLoss += abs(tmp);
 
-					tmp = *discountedRewardPtr - value;
-					*valueGradPtr = 2 * tmp;
-					valueLoss += tmp * tmp;
+					*valueGradPtr = 2 * (*discountedRewardPtr - value);
 
 					observationPtr++;
 					actionPtr++;
@@ -208,8 +220,8 @@ int main()
 
 			/*if (klDivergence / arrSize > klThreshold)
 				break;*/
+			//printf("klDivergence: %f\n", klDivergence / arrSize);
 
-				// update model
 			policyGradPtr = policyGrads;
 			valueGradPtr = valueGrads;
 			for (uint32_t rollout = maxRollouts; rollout--;)
@@ -223,9 +235,9 @@ int main()
 				}
 			}
 		}
-		printf("policy3: %f, %f\n", nn.policy.x, nn.policy.y);
-		printf("value: %f\n", nn.value);
-		printf("\n");
+		/*printf("policy3: %f, %f\n", nn.policy.x, nn.policy.y);
+		printf("value: %f\n", nn.value);*/
+		printf("policyLoss: %f\n", policyLoss / arrSize);
 	}
 
 	return 0;
