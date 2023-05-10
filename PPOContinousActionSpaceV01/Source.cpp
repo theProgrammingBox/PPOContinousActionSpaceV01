@@ -18,6 +18,7 @@ respectively. I still dont fully understand why this works, but it does.
 
 /*
 TODO:
+-1: learn more about the kl divergence thing
 0. add an actual model
 1. alter the buffers so they can handle dynamic length games
 2. add a dynamic length game
