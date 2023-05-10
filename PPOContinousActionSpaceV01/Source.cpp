@@ -12,7 +12,7 @@ reward we got from the move. If the reward is higher than the average, we want t
 the probability of the move, and vice versa. That is basically what advantage is.
 3. the important thing about ppo is the clipping. When we update the policy, we check if that
 same move is more/less likely to be taken. we do this by taking a ratio of their log probabilities.
-if the ratio is greater or less than 1 + epsilon, we clip it to 1 + epsilon or 1 - epsilon
+if the ratio is greater or less than 1 +- epsilon, we clip it to 1 + epsilon or 1 - epsilon
 respectively. I still dont fully understand why this works, but it does.
 */
 
